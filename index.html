@@ -56,6 +56,7 @@ let generatedUpTo = 0;
 let difficultyMult = 1;
 let screenShake = 0;
 let godzillaWarningTimer = 0;
+let invincibleTimer = 0;
 
 // --- Input ---
 const keys = {};
@@ -185,8 +186,9 @@ function generateWorld(fromX, toX) {
     bx += bw + randInt(40, 100);
   }
 
-  // Enemies
-  let ex = fromX + 400;
+  // Enemies — keep a safe zone around the player start position
+  let enemySafeZone = 700;
+  let ex = Math.max(fromX + 400, enemySafeZone);
   while (ex < toX) {
     let gap = Math.max(200, 600 - age * 12);
     let type = Math.random();
@@ -256,6 +258,7 @@ function initGame() {
   difficultyMult = 1;
   screenShake = 0;
   godzillaWarningTimer = 0;
+  invincibleTimer = 2.5; // seconds of spawn protection
 
   player.x = 200;
   player.y = groundY() - 50;
@@ -279,6 +282,9 @@ function update(dt) {
   gameTime += dt;
   age = Math.min(WIN_AGE, Math.floor(gameTime / AGE_DURATION));
   difficultyMult = 1 + age * 0.05;
+
+  // Spawn invincibility countdown
+  if (invincibleTimer > 0) invincibleTimer -= dt;
 
   // Update player size based on age
   let size = getPlayerSize();
@@ -404,6 +410,8 @@ function update(dt) {
   // --- Enemies ---
   for (let e of enemies) {
     updateEnemy(e, dt);
+    // Skip collision while invincible
+    if (invincibleTimer > 0) continue;
     // Collision with player
     let eb = { x: e.x, y: e.y, width: e.w, height: e.h };
     if (e.type === 'nessie' && !e.emerged) continue;
@@ -562,9 +570,13 @@ function draw() {
     drawEnemy(e);
   }
 
-  // Player
+  // Player (blink while invincible)
   if (player.alive) {
+    if (invincibleTimer > 0) {
+      ctx.globalAlpha = Math.sin(gameTime * 12) > 0 ? 1 : 0.25;
+    }
     drawPlayer();
+    ctx.globalAlpha = 1;
   }
 
   // Particles
@@ -1213,6 +1225,15 @@ function drawUI() {
     ctx.font = '14px Arial, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(stageLabel, canvas.width - 15, 20);
+
+    // Invincibility indicator
+    if (invincibleTimer > 0) {
+      let pulse = Math.sin(gameTime * 8) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(100,200,255,${pulse})`;
+      ctx.font = 'bold 16px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('SHIELD ACTIVE', canvas.width / 2, 30);
+    }
 
     // Controls hint (fade out after a few seconds)
     if (gameTime < 6) {
