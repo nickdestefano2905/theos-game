@@ -312,11 +312,11 @@ function update(dt) {
   let accel = player.onGround ? 0.6 : 0.35;
   let friction = player.onGround ? 0.82 : 0.94;
 
-  if (keys['ArrowLeft'] || keys['KeyA']) {
+  if (keys['ArrowLeft'] || keys['KeyA'] || touchLeft) {
     player.vx -= accel;
     player.facing = -1;
   }
-  if (keys['ArrowRight'] || keys['KeyD']) {
+  if (keys['ArrowRight'] || keys['KeyD'] || touchRight) {
     player.vx += accel;
     player.facing = 1;
   }
@@ -325,7 +325,7 @@ function update(dt) {
   player.vx = clamp(player.vx, -moveSpeed, moveSpeed);
 
   // Jump
-  let jumpKey = keys['ArrowUp'] || keys['KeyW'] || keys['Space'];
+  let jumpKey = keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || touchJump;
   if (jumpKey && player.onGround && !player.jumpHeld) {
     player.vy = -(11.5 + age * 0.15);
     player.onGround = false;
@@ -622,6 +622,7 @@ function draw() {
 
   // UI
   drawUI();
+  drawTouchControls();
 }
 
 // --- Drawing Functions ---
@@ -1628,19 +1629,103 @@ canvas.addEventListener('click', e => {
   }
 });
 
-// --- Touch support for mobile ---
-canvas.addEventListener('touchstart', e => {
+// --- Mobile Touch Controls ---
+let isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let touchLeft = false, touchRight = false, touchJump = false;
+
+// Touch button layout
+function getTouchButtons() {
+  let s = Math.min(canvas.width, canvas.height) * 0.12; // button size
+  let pad = 15;
+  let bottomY = canvas.height - s - pad;
+  return {
+    left:  { x: pad, y: bottomY - s - 10, w: s, h: s, label: '\u25C0' },
+    right: { x: pad + s + 10, y: bottomY - s - 10, w: s, h: s, label: '\u25B6' },
+    jump:  { x: canvas.width - s - pad, y: bottomY - s - 10, w: s, h: s, label: '\u25B2' }
+  };
+}
+
+function touchInBtn(tx, ty, btn) {
+  // Generous hit area (1.3x)
+  let cx = btn.x + btn.w / 2, cy = btn.y + btn.h / 2;
+  let hw = btn.w * 0.65, hh = btn.h * 0.65;
+  return tx >= cx - hw && tx <= cx + hw && ty >= cy - hh && ty <= cy + hh;
+}
+
+function handleTouches(e) {
   e.preventDefault();
   let rect = canvas.getBoundingClientRect();
-  let touch = e.touches[0];
-  mouseX = touch.clientX - rect.left;
-  mouseY = touch.clientY - rect.top;
-  // Simulate click
-  canvas.dispatchEvent(new MouseEvent('click', {
-    clientX: touch.clientX,
-    clientY: touch.clientY
-  }));
+  let btns = getTouchButtons();
+  touchLeft = false;
+  touchRight = false;
+  touchJump = false;
+
+  for (let i = 0; i < e.touches.length; i++) {
+    let tx = e.touches[i].clientX - rect.left;
+    let ty = e.touches[i].clientY - rect.top;
+    if (touchInBtn(tx, ty, btns.left)) touchLeft = true;
+    if (touchInBtn(tx, ty, btns.right)) touchRight = true;
+    if (touchInBtn(tx, ty, btns.jump)) touchJump = true;
+    // Update mouse position for menu button hover
+    mouseX = tx;
+    mouseY = ty;
+  }
+}
+
+canvas.addEventListener('touchstart', e => {
+  handleTouches(e);
+  // Also handle menu/button clicks
+  if (gameState !== 'playing') {
+    let rect = canvas.getBoundingClientRect();
+    let touch = e.touches[0];
+    canvas.dispatchEvent(new MouseEvent('click', {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    }));
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', handleTouches, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  handleTouches(e);
+  if (e.touches.length === 0) {
+    touchLeft = false;
+    touchRight = false;
+    touchJump = false;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', () => {
+  touchLeft = false;
+  touchRight = false;
+  touchJump = false;
 });
+
+function drawTouchControls() {
+  if (!isMobile || gameState !== 'playing') return;
+  let btns = getTouchButtons();
+  ctx.globalAlpha = 0.35;
+
+  for (let key of ['left', 'right', 'jump']) {
+    let b = btns[key];
+    let pressed = (key === 'left' && touchLeft) || (key === 'right' && touchRight) || (key === 'jump' && touchJump);
+    ctx.fillStyle = pressed ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
+    roundRect(b.x, b.y, b.w, b.h, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    roundRect(b.x, b.y, b.w, b.h, 12);
+    ctx.stroke();
+    ctx.fillStyle = '#FFF';
+    ctx.font = `bold ${b.w * 0.45}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
+  }
+
+  ctx.globalAlpha = 1;
+}
 
 // --- Game Loop ---
 function gameLoop(timestamp) {
