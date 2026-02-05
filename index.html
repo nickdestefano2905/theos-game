@@ -321,7 +321,7 @@ function update(dt) {
   // Jump
   let jumpKey = keys['ArrowUp'] || keys['KeyW'] || keys['Space'];
   if (jumpKey && player.onGround && !player.jumpHeld) {
-    player.vy = -11.5;
+    player.vy = -(11.5 + age * 0.15);
     player.onGround = false;
     player.jumpHeld = true;
     spawnParticles(player.x + player.width / 2, player.y + player.height, 5, '#999');
