@@ -57,6 +57,9 @@ let difficultyMult = 1;
 let screenShake = 0;
 let godzillaWarningTimer = 0;
 let invincibleTimer = 0;
+let lives = 1;
+let nextLifeAt = 100; // coins needed for next extra life
+let lifePopupTimer = 0; // show "+1 Life" popup
 
 // --- Input ---
 const keys = {};
@@ -259,6 +262,9 @@ function initGame() {
   screenShake = 0;
   godzillaWarningTimer = 0;
   invincibleTimer = 2.5; // seconds of spawn protection
+  lives = 1;
+  nextLifeAt = 100;
+  lifePopupTimer = 0;
 
   player.x = 200;
   player.y = groundY() - 50;
@@ -404,8 +410,18 @@ function update(dt) {
       c.collected = true;
       coins++;
       spawnParticles(c.x, c.y, 6, '#FFD700');
+      // Extra life every 100 coins
+      if (coins >= nextLifeAt) {
+        lives++;
+        nextLifeAt += 100;
+        lifePopupTimer = 2;
+        spawnParticles(player.x + player.width / 2, player.y, 15, '#FF69B4');
+      }
     }
   }
+
+  // Life popup timer
+  if (lifePopupTimer > 0) lifePopupTimer -= dt;
 
   // --- Enemies ---
   for (let e of enemies) {
@@ -417,11 +433,18 @@ function update(dt) {
     if (e.type === 'nessie' && !e.emerged) continue;
     if (rectOverlap(pr, eb)) {
       let names = { bigfoot: 'Bigfoot', nessie: 'the Loch Ness Monster', godzilla: 'Godzilla' };
-      deathMessage = `You were eaten by ${names[e.type]}! You made it to age ${age}.`;
-      gameState = 'gameover';
-      player.alive = false;
       spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 20, '#FF4444');
-      return;
+      lives--;
+      if (lives <= 0) {
+        deathMessage = `You were eaten by ${names[e.type]}! You made it to age ${age}.`;
+        gameState = 'gameover';
+        player.alive = false;
+        return;
+      }
+      // Survived — use a life, grant invincibility
+      invincibleTimer = 2.5;
+      player.vy = -8; // knock the player up a bit
+      break;
     }
   }
 
@@ -1218,6 +1241,33 @@ function drawUI() {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(`${coins}`, 206, 19);
+
+    // Lives
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    roundRect(310, 10, 90, 42, 8);
+    ctx.fill();
+    // Heart icon
+    ctx.fillStyle = '#FF4444';
+    ctx.font = '18px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('\u2764', 330, 30);
+    // Count
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${lives}`, 345, 19);
+
+    // +1 Life popup
+    if (lifePopupTimer > 0) {
+      let alpha = Math.min(lifePopupTimer, 1);
+      let rise = (2 - lifePopupTimer) * 20;
+      ctx.fillStyle = `rgba(255,105,180,${alpha})`;
+      ctx.font = 'bold 24px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('+1 LIFE!', canvas.width / 2, 70 - rise);
+    }
 
     // Stage label
     let stageLabel = { child: 'Child', teen: 'Teenager', youngadult: 'Young Adult', adult: 'Adult' }[getStage()];
